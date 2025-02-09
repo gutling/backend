@@ -26,6 +26,7 @@ def get_hotels(id: int | None = Query(None, description='ID отеля'),
                page: int | None = Query(1, description='Номер страницы'),
                per_page: int | None = Query(3, description='Кол-во отелей на странице')):
     _hotels = []
+
     for hotel in hotels:
         if id and hotel['id'] != id:
             continue
