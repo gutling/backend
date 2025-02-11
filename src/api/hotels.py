@@ -1,12 +1,10 @@
-from tkinter.scrolledtext import example
+from fastapi import Query, Body, Path, APIRouter
 
-from fastapi import FastAPI, Query, Body, Path, APIRouter
-from pyexpat.errors import messages
+from src.schemas.hotels import HotelPatch, Hotel
+from src.api.dependencies import PaginationDep
 
-from schemas.hotels import HotelPatch, Hotel
 
-Hotel
-router = APIRouter(prefix='/hotels')
+router = APIRouter(prefix='/models')
 
 
 hotels = [
@@ -21,10 +19,9 @@ hotels = [
 
 
 @router.get('', summary='Получение отелей')
-def get_hotels(id: int | None = Query(None, description='ID отеля'),
-               title: str | None = Query(None, description='Название отеля'),
-               page: int | None = Query(1, description='Номер страницы'),
-               per_page: int | None = Query(3, description='Кол-во отелей на странице')):
+def get_hotels(pagination: PaginationDep,
+               id: int | None = Query(None, description='ID отеля'),
+               title: str | None = Query(None, description='Название отеля')):
     _hotels = []
 
     for hotel in hotels:
@@ -33,11 +30,9 @@ def get_hotels(id: int | None = Query(None, description='ID отеля'),
         if title and hotel['title'] != title:
             continue
         _hotels.append(hotel)
-    if page * per_page <= len(_hotels):
-        slise_finish: int = page * per_page
-        slice_start: int = slise_finish - per_page
-        return _hotels[slice_start:slise_finish]
-    return {'message': 'Количество запрашиваемых отелей превышает число доступных'}
+    if pagination.per_page and pagination.page:
+        return _hotels[pagination.per_page * (pagination.page - 1):][:pagination.per_page]
+    return _hotels
 
 
 
