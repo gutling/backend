@@ -23,7 +23,7 @@ class BaseRepository:
         return result.scalars().one_or_none()
 
 
-    async def add(self, data):
-        add_statement = insert(self.model).values(**data.model_dump()).returning(literal_column('*'))
+    async def add(self, data: BaseModel):
+        add_statement = insert(self.model).values(**data.model_dump()).returning(self.model)
         result = await self.session.execute(add_statement)
-        return result.one()
+        return result.scalars().one()
