@@ -1,69 +1,59 @@
-from fastapi import Query, Body, Path, APIRouter
+from pydoc import locate
 
+from fastapi import Query, Body, Path, APIRouter
+from sqlalchemy.sql.operators import like_op
+from watchfiles import awatch
+
+from src.database import async_session_maker, engine
+from src.repositories.hotels import HotelsRepository
 from src.schemas.hotels import HotelPatch, Hotel
 from src.api.dependencies import PaginationDep
+from src.models.hotels import HotelsORM
+
+from sqlalchemy import insert, select, func
 
 
-router = APIRouter(prefix='/models')
+router = APIRouter(prefix="/hotels", tags=["Отели"])
 
 
-hotels = [
-    {"id": 1, "title": "Sochi", "name": "sochi"},
-    {"id": 2, "title": "Дубай", "name": "dubai"},
-    {"id": 3, "title": "Мальдивы", "name": "maldivi"},
-    {"id": 4, "title": "Геленджик", "name": "gelendzhik"},
-    {"id": 5, "title": "Москва", "name": "moscow"},
-    {"id": 6, "title": "Казань", "name": "kazan"},
-    {"id": 7, "title": "Санкт-Петербург", "name": "spb"},
-]
 
 
 @router.get('', summary='Получение отелей')
-def get_hotels(pagination: PaginationDep,
-               id: int | None = Query(None, description='ID отеля'),
-               title: str | None = Query(None, description='Название отеля')):
-    _hotels = []
+async def get_hotels(
+        pagination: PaginationDep,
+        location: str | None = Query(None, description='Местоположение отеля'),
+        title: str | None = Query(None, description='Название отеля')):
 
-    for hotel in hotels:
-        if id and hotel['id'] != id:
-            continue
-        if title and hotel['title'] != title:
-            continue
-        _hotels.append(hotel)
-    if pagination.per_page and pagination.page:
-        return _hotels[pagination.per_page * (pagination.page - 1):][:pagination.per_page]
-    return _hotels
+    per_page = pagination.per_page or 5
+    async with async_session_maker() as session:
+        return await HotelsRepository(session
+                                      ).get_all(location=location,
+                                      title=title,
+                                      limit=per_page,
+                                      offset=per_page * (pagination.page - 1))
 
 
-
-
-examples = {
+@router.post('', summary='Запись нового отеля')
+async def create_hotel(hotel_data: Hotel = Body(openapi_examples={
     '1': {'summary': 'Сочи',
           'value':
               {
                   'title': 'Прекрасный отель в Сочи',
-                  'name': 'Отель SochiHotel'
+                  'location': 'Улица Моря, д. 5'
               }
           },
     '2': {'summary': 'Дубай',
           'value':
               {
                   'title': 'Прекрасный отель в Дубайске',
-                  'name': 'Отель ДубайскHotel'
+                  'location': 'Улица Ракушкина, д. 12'
               }
           }
-}
-
-
-@router.post('', summary='Запись нового отеля')
-def create_hotel(hotel_data: Hotel = Body(openapi_examples=examples)):
-    global hotels
-    hotels.append(
-        {'id': hotels[-1]['id'] + 1,
-         'title': hotel_data.title,
-         'name': hotel_data.name
-    })
-    return {'message': 'OK'}
+})):
+    async with async_session_maker() as session:
+        hotel = await HotelsRepository(session).add(hotel_data)
+        await session.commit()
+    return {'message': 'OK', 'data': hotel}
 
 
 @router.put('/{hotel_id}', summary='Полное изменение отеля')
@@ -84,18 +74,18 @@ def put_hotel(hotel_id: int, hotel_data:  Hotel):
 def patch_hotel(hotel_id:int,
                 hotel_data: HotelPatch):
     i = 0
-    if hotel_data.title or hotel_data.name:
+    if hotel_data.title or hotel_data.location:
         for hotel in hotels:
             if hotel['id'] == hotel_id:
-                if hotel_data.title and not hotel_data.name:
+                if hotel_data.title and not hotel_data.location:
                     hotel['title'] = hotel_data.title
                     hotels[i] = hotel
-                elif hotel_data.name and not hotel_data.title:
-                    hotel['name'] = hotel_data.name
+                elif hotel_data.location and not hotel_data.title:
+                    hotel['location'] = hotel_data.location
                     hotels[i] = hotel
                 else:
                     hotel['title'] = hotel_data.title
-                    hotel['name'] = hotel_data.name
+                    hotel['location'] = hotel_data.location
                     hotels[i] = hotel
                 return hotels
             i += 1
